@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Car Allowance LillyTech v1.2</title>
+<title>Car Allowance LillyTech v1.3</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{--nav:#071b33;--blue:#0d6efd;--sky:#eaf3ff;--ink:#172033;--muted:#667085;--line:#d9e2ef;--ok:#16794a;--danger:#b42318}
@@ -18,10 +18,10 @@ label{font-size:12px;font-weight:700;color:#445}input,select,button{width:100%;p
 @media(max-width:720px){.cards{grid-template-columns:repeat(2,1fr)}.grid,.actions{grid-template-columns:1fr}.v{font-size:21px}}
 @media print{header,.no-print,.cards,.panel:not(.printable){display:none!important}.wrap{padding:0}.printable{border:0;box-shadow:none}.report{display:block!important}}
 </style></head><body>
-<header><div class="head"><div><div class="brand">⛽ Car Allowance · LillyTech</div><div class="ver">Registro personal de combustible · nube + respaldo local</div></div><div class="ver">v1.2</div></div></header>
+<header><div class="head"><div><div class="brand">⛽ Car Allowance · LillyTech</div><div class="ver">Registro personal de combustible · nube + respaldo local</div></div><div class="ver">v1.3</div></div></header>
 <main class="wrap">
 <section id="authBox" class="panel auth no-print"><h2>🔐 Acceso privado</h2><p class="hint">Escribe tu correo. Recibirás un enlace de acceso. Las facturas y sus fotos quedan privadas en tu cuenta.</p><label>Correo electrónico<input id="email" type="email" autocomplete="email"></label><button id="login">Enviar enlace de acceso</button><div id="authMsg" class="hint" style="margin-top:10px;min-height:18px"></div>
-<div class="hint" style="margin-top:8px">Sitio de retorno: <span id="returnSite"></span></div></section>
+<div class="hint" style="margin-top:8px">Sitio de retorno: <span id="returnSite">GitHub Pages</span></div></section>
 <div id="app" class="hidden">
 <section class="no-print"><div class="deadline"><span class="pill">🧾 Tribu-CR: ideal día 15</span><span class="pill">📤 F44A + respaldo: máximo día 28</span></div><div id="sync" class="sync">☁️ Conectado a Lilly_general</div></section>
 <section class="cards no-print" style="margin-top:12px"><div class="card"><div class="k">Facturas del mes</div><div class="v" id="kCount">0</div></div><div class="card"><div class="k">Litros</div><div class="v" id="kLiters">0.000</div></div><div class="card"><div class="k">Combustible</div><div class="v" id="kTotal">₡0</div></div><div class="card"><div class="k">Comprobantes</div><div class="v" id="kPhotos">0/0</div></div></section>
@@ -37,8 +37,8 @@ label{font-size:12px;font-weight:700;color:#445}input,select,button{width:100%;p
 <section class="panel printable report" id="report"><div style="text-align:right;font-size:10px">F44 A Reporte de Car Allowance<br>Rev: 01/01/21 Versión: 1</div><h2 style="text-align:center">Reporte de Car Allowance</h2><p><b>Nombre del Funcionario:</b> Lilliana Retana Villalobos</p><p><b>Mes de Reporte:</b> <span id="rMonth"></span></p><table><thead><tr><th>Factura Electrónica Personal</th><th>Factura Gasolinera</th><th>Fecha</th><th>Litros</th><th>Monto/L</th><th>Total</th><th>Combustible</th></tr></thead><tbody id="rBody"></tbody><tfoot><tr><th colspan="3">TOTAL</th><th id="rLiters"></th><th></th><th id="rTotal"></th><th></th></tr></tfoot></table><div id="receipts"></div></section>
 </div></main>
 <script>
-const URL='https://vgkyoyosjewdygxtnqvu.supabase.co', KEY='sb_publishable_QOZiGlFdzOcCQtqDqI_I_A_ian2l-pf';
-const sb=supabase.createClient(URL,KEY),$=id=>document.getElementById(id);let user=null,records=[],closing=null,editing=null;
+const SUPABASE_URL='https://vgkyoyosjewdygxtnqvu.supabase.co', KEY='sb_publishable_QOZiGlFdzOcCQtqDqI_I_A_ian2l-pf';
+const sb=supabase.createClient(SUPABASE_URL,KEY),$=id=>document.getElementById(id);let user=null,records=[],closing=null,editing=null;
 const money=n=>'₡'+Number(n||0).toLocaleString('es-CR',{minimumFractionDigits:0,maximumFractionDigits:2});
 const iso=new Date().toISOString();$('date').value=iso.slice(0,10);$('month').value=iso.slice(0,7);
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -84,6 +84,6 @@ $('saveClosing').onclick=async()=>{let report_month=$('month').value+'-01',paylo
 async function signed(path){if(!path)return null;let {data}=await sb.storage.from('car-allowance-receipts').createSignedUrl(path,600);return data?.signedUrl||null}
 $('printReport').onclick=async()=>{if(!records.length)return alert('No hay facturas en este mes.');$('rMonth').textContent=monthName($('month').value);let p=$('personal').value.trim();$('rBody').innerHTML=records.map((r,i)=>`<tr><td>${i===0?esc(p):''}</td><td>${esc(r.receipt_number)}</td><td>${r.purchase_date.split('-').reverse().join('/')}</td><td>${Number(r.liters).toFixed(3)}</td><td>${money(r.price_per_liter)}</td><td>${money(r.total_amount)}</td><td>${esc(r.fuel_type)}</td></tr>`).join('');$('rLiters').textContent=records.reduce((s,r)=>s+Number(r.liters),0).toFixed(3);$('rTotal').textContent=money(records.reduce((s,r)=>s+Number(r.total_amount),0));let pages=[];for(const r of records){if(r.image_path){let u=await signed(r.image_path);if(u&&!r.image_path.toLowerCase().endsWith('.pdf'))pages.push(`<div class="receipt-page"><b>Factura ${esc(r.receipt_number)} · ${r.purchase_date} · ${money(r.total_amount)}</b><br><img src="${u}"></div>`)}}$('receipts').innerHTML=pages.join('');setTimeout(()=>print(),400)}
 $('csv').onclick=()=>{let rows=[['Factura electrónica personal','Factura gasolinera','Fecha','Litros','Monto por litro','Monto total','Combustible'],...records.map((r,i)=>[i?'':$('personal').value,r.receipt_number,r.purchase_date,r.liters,r.price_per_liter,r.total_amount,r.fuel_type])],txt='\ufeff'+rows.map(x=>x.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n'),a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:'text/csv;charset=utf-8'}));a.download='Car_Allowance_'+$('month').value+'.csv';a.click()}
-$('returnSite').textContent=location.origin+location.pathname;
+$('returnSite').textContent=window.location.origin+window.location.pathname;
 boot();
 </script></body></html>
