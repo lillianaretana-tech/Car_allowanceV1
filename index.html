@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Car Allowance LillyTech v2.0</title>
+<title>Car Allowance LillyTech v2.1</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-populate@1.21.0/browser/xlsx-populate.min.js"></script>
 <style>
@@ -19,7 +19,7 @@ label{font-size:12px;font-weight:700;color:#445}input,select,button{width:100%;p
 @media(max-width:720px){.cards{grid-template-columns:repeat(2,1fr)}.grid,.actions{grid-template-columns:1fr}.v{font-size:21px}}
 @media print{header,.no-print,.cards,.panel:not(.printable){display:none!important}.wrap{padding:0}.printable{border:0;box-shadow:none}.report{display:block!important}}
 </style></head><body>
-<header><div class="head"><div><div class="brand">⛽ Car Allowance · LillyTech</div><div class="ver">Registro personal de combustible · nube + respaldo local</div></div><div class="ver">v2.0</div></div></header>
+<header><div class="head"><div><div class="brand">⛽ Car Allowance · LillyTech</div><div class="ver">Registro personal de combustible · nube + respaldo local</div></div><div class="ver">v2.1</div></div></header>
 <main class="wrap">
 <section id="authBox" class="panel auth no-print"><h2>🔐 Conexión privada</h2><p class="hint">Solo se necesita cuando este navegador no tiene una sesión guardada. Después Car Allowance abre directamente.</p><label>Correo electrónico<input id="email" type="email" autocomplete="email"></label><button id="login">Conectar este navegador</button><div id="authMsg" class="hint" style="margin-top:10px;min-height:18px"></div>
 <div id="envNote" class="hint" style="margin-top:8px"></div><div class="hint" style="margin-top:8px">Sitio de retorno: <span id="returnSite">—</span></div></section>
@@ -114,7 +114,30 @@ if(file){let ext=(file.name.split('.').pop()||'jpg').toLowerCase(),path=`${user.
 let payload={owner_id:user.id,purchase_date:$('date').value,receipt_number:inv,liters:lit,price_per_liter:price,total_amount:total,fuel_type:$('fuel').value,station:$('station').value.trim()||null,image_path};
 let q=editing?sb.from('ca_fuel_receipts').update(payload).eq('id',editing):sb.from('ca_fuel_receipts').insert(payload);let {error}=await q;if(error)throw error;clearForm();await load();alert('✓ Factura guardada en la nube.');}catch(e){setSync(false,'No se pudo guardar');alert('No se pudo guardar: '+e.message)}}
 $('saveClosing').onclick=async()=>{let report_month=$('month').value+'-01',payload={owner_id:user.id,report_month,personal_invoice_number:$('personal').value.trim()||null};let q=closing?sb.from('ca_monthly_closings').update(payload).eq('id',closing.id):sb.from('ca_monthly_closings').insert(payload);let {error}=await q;if(error)return alert(error.message);await load();alert('✓ Cierre mensual guardado.')}
-async function signed(path){if(!path)return null;let {data}=await sb.storage.from('car-allowance-receipts').createSignedUrl(path,600);return data?.signedUrl||null}
+async function receiptBlobUrl(path){
+  if(!path)return null;
+  const {data,error}=await sb.storage.from('car-allowance-receipts').download(path);
+  if(error)throw error;
+  return URL.createObjectURL(data);
+}
+async function waitForImage(img){
+  if(img.complete && img.naturalWidth>0){
+    try{if(img.decode)await img.decode()}catch(_){}
+    return;
+  }
+  await new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(new Error('La imagen tardó demasiado en cargar.')),15000);
+    img.onload=async()=>{
+      clearTimeout(timer);
+      try{if(img.decode)await img.decode()}catch(_){}
+      resolve();
+    };
+    img.onerror=()=>{
+      clearTimeout(timer);
+      reject(new Error('No se pudo cargar la imagen del comprobante.'));
+    };
+  });
+}
 
 function b64ToArrayBuffer(b64){
   const bin=atob(b64), bytes=new Uint8Array(bin.length);
@@ -179,6 +202,64 @@ $('excelReport').onclick=async()=>{
   }
 };
 
-$('printReport').onclick=async()=>{if(!records.length)return alert('No hay facturas en este mes.');$('rMonth').textContent=monthName($('month').value);let p=$('personal').value.trim();$('rBody').innerHTML=records.map((r,i)=>`<tr><td>${i===0?esc(p):''}</td><td>${esc(r.receipt_number)}</td><td>${r.purchase_date.split('-').reverse().join('/')}</td><td>${Number(r.liters).toFixed(3)}</td><td>${money(r.price_per_liter)}</td><td>${money(r.total_amount)}</td><td>${esc(r.fuel_type)}</td></tr>`).join('');$('rLiters').textContent=records.reduce((s,r)=>s+Number(r.liters),0).toFixed(3);$('rTotal').textContent=money(records.reduce((s,r)=>s+Number(r.total_amount),0));let pages=[];for(const r of records){if(r.image_path){let u=await signed(r.image_path);if(u&&!r.image_path.toLowerCase().endsWith('.pdf'))pages.push(`<div class="receipt-page"><b>Factura ${esc(r.receipt_number)} · ${r.purchase_date} · ${money(r.total_amount)}</b><br><img src="${u}"></div>`)}}$('receipts').innerHTML=pages.join('');setTimeout(()=>print(),400)}
+$('printReport').onclick=async()=>{
+  if(!records.length)return alert('No hay facturas en este mes.');
+  try{
+    setSync(true,'Preparando comprobantes…');
+    $('rMonth').textContent=monthName($('month').value);
+    let p=$('personal').value.trim();
+    $('rBody').innerHTML=records.map((r,i)=>`<tr><td>${i===0?esc(p):''}</td><td>${esc(r.receipt_number)}</td><td>${r.purchase_date.split('-').reverse().join('/')}</td><td>${Number(r.liters).toFixed(3)}</td><td>${money(r.price_per_liter)}</td><td>${money(r.total_amount)}</td><td>${esc(r.fuel_type)}</td></tr>`).join('');
+    $('rLiters').textContent=records.reduce((s,r)=>s+Number(r.liters),0).toFixed(3);
+    $('rTotal').textContent=money(records.reduce((s,r)=>s+Number(r.total_amount),0));
+
+    const receipts=$('receipts');
+    receipts.innerHTML='';
+    const tempUrls=[];
+    const imgs=[];
+
+    for(const r of records){
+      if(!r.image_path)continue;
+
+      const page=document.createElement('div');
+      page.className='receipt-page';
+
+      const title=document.createElement('b');
+      title.textContent=`Factura ${r.receipt_number} · ${r.purchase_date} · ${money(r.total_amount)}`;
+      page.appendChild(title);
+      page.appendChild(document.createElement('br'));
+
+      if(r.image_path.toLowerCase().endsWith('.pdf')){
+        const note=document.createElement('p');
+        note.textContent='Comprobante guardado como PDF. Ábrelo desde la app para imprimirlo por separado.';
+        page.appendChild(note);
+      }else{
+        const url=await receiptBlobUrl(r.image_path);
+        tempUrls.push(url);
+        const img=document.createElement('img');
+        img.alt=`Comprobante factura ${r.receipt_number}`;
+        img.src=url;
+        page.appendChild(img);
+        imgs.push(img);
+      }
+      receipts.appendChild(page);
+    }
+
+    if(!receipts.children.length){
+      throw new Error('No hay comprobantes adjuntos para este mes.');
+    }
+
+    await Promise.all(imgs.map(waitForImage));
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+
+    setSync(true,'Comprobantes listos para imprimir');
+    window.print();
+
+    setTimeout(()=>tempUrls.forEach(u=>URL.revokeObjectURL(u)),60000);
+  }catch(e){
+    console.error('Comprobantes:',e);
+    setSync(false,'No se pudieron preparar los comprobantes');
+    alert('No se pudieron preparar los comprobantes: '+(e?.message||e));
+  }
+}
 boot();
 </script></body></html>
